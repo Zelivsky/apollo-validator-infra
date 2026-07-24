@@ -134,12 +134,12 @@ else
 fi
 
 if [ "$TOKENS" != "N/A" ]; then
-    TOKENS_TIA=$(echo "scale=2; $TOKENS / 1000000" | bc 2>/dev/null || echo "$TOKENS")
+    TOKENS_TIA=$(echo "$TOKENS" | awk '{printf "%.2f", $1/1000000}')
     TOKENS="${TOKENS_TIA} TIA"
 fi
 
 if [ "$COMMISSION_RAW" != "N/A" ]; then
-    COMMISSION=$(echo "scale=0; $COMMISSION_RAW * 100 / 1" | bc 2>/dev/null || echo "$COMMISSION_RAW")
+    COMMISSION=$(echo "$COMMISSION_RAW" | awk '{printf "%.0f", $1*100}')
     COMMISSION="${COMMISSION}%"
 fi
 
