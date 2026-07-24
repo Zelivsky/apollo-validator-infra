@@ -50,8 +50,10 @@ get_jail_status() {
 
 get_cpu_info() {
     local model cores
-    model=$(lscpu 2>/dev/null | grep "Model name" | sed 's/Model name:\s*//' || echo "N/A")
+    model=$(lscpu 2>/dev/null | grep "^Model name" | sed 's/Model name:\s*//' || echo "N/A")
     cores=$(nproc 2>/dev/null || echo "N/A")
+    # Clean model - remove extra whitespace and BIOS info
+    model=$(echo "$model" | head -1 | sed 's/\s\+/ /g' | xargs)
     echo "$model|$cores"
 }
 
