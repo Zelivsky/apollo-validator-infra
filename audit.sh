@@ -123,8 +123,25 @@ TIMESTAMP=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
 # Validator info
 VALIDATOR_JSON=$(get_validator_info)
 TOKENS=$(echo "$VALIDATOR_JSON" | jq -r '.validator.tokens // "N/A"' 2>/dev/null || echo "N/A")
-COMMISSION=$(echo "$VALIDATOR_JSON" | jq -r '.validator.commission.commission_rates.rate // "N/A"' 2>/dev/null || echo "N/A")
-STATUS=$(echo "$VALIDATOR_JSON" | jq -r '.validator.status // "N/A"' 2>/dev/null || echo "N/A")
+COMMISSION_RAW=$(echo "$VALIDATOR_JSON" | jq -r '.validator.commission.commission_rates.rate // "N/A"' 2>/dev/null || echo "N/A")
+STATUS_RAW=$(echo "$VALIDATOR_JSON" | jq -r '.validator.status // "N/A"' 2>/dev/null || echo "N/A")
+
+# Format values
+if [ "$STATUS_RAW" = "BOND_STATUS_BONDED" ]; then
+    STATUS="Active (Bonded)"
+else
+    STATUS="$STATUS_RAW"
+fi
+
+if [ "$TOKENS" != "N/A" ]; then
+    TOKENS_TIA=$(echo "scale=2; $TOKENS / 1000000" | bc 2>/dev/null || echo "$TOKENS")
+    TOKENS="${TOKENS_TIA} TIA"
+fi
+
+if [ "$COMMISSION_RAW" != "N/A" ]; then
+    COMMISSION=$(echo "scale=0; $COMMISSION_RAW * 100 / 1" | bc 2>/dev/null || echo "$COMMISSION_RAW")
+    COMMISSION="${COMMISSION}%"
+fi
 
 # Generate markdown
 cat > "$AUDIT_FILE" << EOF
