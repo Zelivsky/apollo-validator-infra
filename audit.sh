@@ -50,7 +50,7 @@ get_jail_status() {
 
 get_cpu_info() {
     local model cores
-    model=$(lscpu 2>/dev/null | awk -F: '/Model name:/{gsub(/^[ \t]+/,"",$2); print $2; exit}' || echo "N/A")
+    model=$(lscpu 2>/dev/null | sed -n 's/^Model name: *//p' | head -1 || echo "N/A")
     cores=$(nproc 2>/dev/null || echo "N/A")
     echo "$model|$cores"
 }
