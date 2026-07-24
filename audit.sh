@@ -122,9 +122,9 @@ TIMESTAMP=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
 
 # Validator info
 VALIDATOR_JSON=$(get_validator_info)
-TOKENS=$(echo "$VALIDATOR_JSON" | jq -r '.tokens // "N/A"' 2>/dev/null || echo "N/A")
-COMMISSION=$(echo "$VALIDATOR_JSON" | jq -r '.commission.commission_rates.rate // "N/A"' 2>/dev/null || echo "N/A")
-STATUS=$(echo "$VALIDATOR_JSON" | jq -r '.status // "N/A"' 2>/dev/null || echo "N/A")
+TOKENS=$(echo "$VALIDATOR_JSON" | jq -r '.validator.tokens // "N/A"' 2>/dev/null || echo "N/A")
+COMMISSION=$(echo "$VALIDATOR_JSON" | jq -r '.validator.commission.commission_rates.rate // "N/A"' 2>/dev/null || echo "N/A")
+STATUS=$(echo "$VALIDATOR_JSON" | jq -r '.validator.status // "N/A"' 2>/dev/null || echo "N/A")
 
 # Generate markdown
 cat > "$AUDIT_FILE" << EOF
