@@ -38,12 +38,12 @@ get_peer_count() {
 }
 
 get_validator_info() {
-    $CELESTIA_BIN query staking validator "$VALIDATOR_ADDR" --home "$CELESTIA_HOME" --node "tcp://127.0.0.1:36657" --output json 2>/dev/null || echo "{}"
+    sudo $CELESTIA_BIN query staking validator "$VALIDATOR_ADDR" --home "$CELESTIA_HOME" --node "tcp://127.0.0.1:36657" --output json 2>/dev/null || echo "{}"
 }
 
 get_jail_status() {
     local info
-    info=$($CELESTIA_BIN query slashing signing-info "$VALIDATOR_ADDR" --home "$CELESTIA_HOME" --node "tcp://127.0.0.1:36657" --output json 2>/dev/null || echo "{}")
+    info=$(sudo $CELESTIA_BIN query slashing signing-info "$VALIDATOR_ADDR" --home "$CELESTIA_HOME" --node "tcp://127.0.0.1:36657" --output json 2>/dev/null || echo "{}")
     local missed
     missed=$(echo "$info" | jq -r '.missed_blocks_counter // "0"' 2>/dev/null || echo "0")
     local jailed_until
@@ -73,7 +73,7 @@ get_uptime() {
 }
 
 get_celestia_uptime() {
-    systemctl show celestia-appd --property=ActiveEnterTimestamp 2>/dev/null | cut -d'=' -f2 || echo "N/A"
+    sudo systemctl show celestia-appd --property=ActiveEnterTimestamp 2>/dev/null | cut -d'=' -f2 || echo "N/A"
 }
 
 get_os_info() {
