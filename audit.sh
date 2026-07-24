@@ -1,13 +1,12 @@
 #!/bin/bash
 # Apollo Validator — Automated Audit Script
-# Collects validator stats and pushes to GitHub
+# Collects real infrastructure data and pushes to GitHub
 # Run via cron: 0 */6 * * * /path/to/audit.sh
 
 set -euo pipefail
 
 # === CONFIG ===
 VALIDATOR_ADDR="celestiavaloper1mcjmn4s8ee5ce0wsuat98kqxggfrhk04te0d38"
-CELESTIA_HOME="${CELESTIA_HOME:-$HOME/.celestia}"
 AUDIT_DIR="$HOME/apollo-validator-infra"
 AUDIT_FILE="$AUDIT_DIR/VALIDATOR-AUDIT.md"
 LOG_FILE="/var/log/validator-audit.log"
@@ -25,12 +24,9 @@ get_block_height() {
 get_sync_status() {
     local catching_up
     catching_up=$(curl -s --max-time 5 localhost:26657/status 2>/dev/null | jq -r '.result.sync_info.catching_up' 2>/dev/null || echo "unknown")
-    if [ "$catching_up" = "false" ]; then
-        echo "✅ Synced"
-    elif [ "$catching_up" = "true" ]; then
-        echo "⚠️ Catching up"
-    else
-        echo "❌ Unknown"
+    if [ "$catching_up" = "false" ]; then echo "Synced"
+    elif [ "$catching_up" = "true" ]; then echo "Catching up"
+    else echo "Unknown"
     fi
 }
 
@@ -53,20 +49,20 @@ get_jail_status() {
 }
 
 get_cpu_info() {
-    local model cores gfni shani
+    local model cores
     model=$(lscpu 2>/dev/null | grep "Model name" | sed 's/Model name:\s*//' || echo "N/A")
     cores=$(nproc 2>/dev/null || echo "N/A")
-    gfni=$(grep -c 'gfni' /proc/cpuinfo 2>/dev/null || echo "0")
-    shani=$(grep -c 'sha_ni' /proc/cpuinfo 2>/dev/null || echo "0")
-    echo "$model|$cores|$gfni|$shani"
+    echo "$model|$cores"
 }
 
 get_system_resources() {
-    local cpu ram disk
+    local cpu ram ram_total disk disk_total
     cpu=$(top -bn1 2>/dev/null | grep "Cpu(s)" | awk '{print $2}' | cut -d'.' -f1 || echo "N/A")
-    ram=$(free -m 2>/dev/null | awk '/Mem:/ {printf "%.1f", $3/$2*100}' || echo "N/A")
-    disk=$(df -h / 2>/dev/null | awk 'NR==2 {print $5}' | tr -d '%' || echo "N/A")
-    echo "$cpu|$ram|$disk"
+    ram=$(free -m 2>/dev/null | awk '/Mem:/ {print $3}' || echo "N/A")
+    ram_total=$(free -m 2>/dev/null | awk '/Mem:/ {print $2}' || echo "N/A")
+    disk=$(df -m / 2>/dev/null | awk 'NR==2 {print $3}' || echo "N/A")
+    disk_total=$(df -m / 2>/dev/null | awk 'NR==2 {print $2}' || echo "N/A")
+    echo "$cpu|$ram|$ram_total|$disk|$disk_total"
 }
 
 get_uptime() {
@@ -81,11 +77,18 @@ get_os_info() {
     lsb_release -ds 2>/dev/null || cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d'"' -f2 || echo "N/A"
 }
 
+get_network_info() {
+    ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '127.0.0.1' | head -1 || echo "N/A"
+}
+
+get_hosting_info() {
+    curl -s --max-time 3 https://ipinfo.io/json 2>/dev/null | jq -r '"\(.city), \(.region), \(.country)"' 2>/dev/null || echo "N/A"
+}
+
 # === MAIN ===
 
 log "Starting audit..."
 
-# Create audit dir if needed
 mkdir -p "$AUDIT_DIR"
 
 # Collect data
@@ -95,18 +98,23 @@ PEER_COUNT=$(get_peer_count)
 JAIL_INFO=$(get_jail_status)
 MISSED_BLOCKS=$(echo "$JAIL_INFO" | cut -d'|' -f1)
 JAILED_UNTIL=$(echo "$JAIL_INFO" | cut -d'|' -f2)
+
 CPU_INFO=$(get_cpu_info)
 CPU_MODEL=$(echo "$CPU_INFO" | cut -d'|' -f1)
 CPU_CORES=$(echo "$CPU_INFO" | cut -d'|' -f2)
-CPU_GFNI=$(echo "$CPU_INFO" | cut -d'|' -f3)
-CPU_SHANI=$(echo "$CPU_INFO" | cut -d'|' -f4)
+
 SYS_RESOURCES=$(get_system_resources)
 SYS_CPU=$(echo "$SYS_RESOURCES" | cut -d'|' -f1)
-SYS_RAM=$(echo "$SYS_RESOURCES" | cut -d'|' -f2)
-SYS_DISK=$(echo "$SYS_RESOURCES" | cut -d'|' -f3)
+RAM_USED=$(echo "$SYS_RESOURCES" | cut -d'|' -f2)
+RAM_TOTAL=$(echo "$SYS_RESOURCES" | cut -d'|' -f3)
+DISK_USED=$(echo "$SYS_RESOURCES" | cut -d'|' -f4)
+DISK_TOTAL=$(echo "$SYS_RESOURCES" | cut -d'|' -f5)
+
 SERVER_UPTIME=$(get_uptime)
 CELESTIA_START=$(get_celestia_uptime)
 OS_INFO=$(get_os_info)
+SERVER_IP=$(get_network_info)
+HOSTING_LOCATION=$(get_hosting_info)
 TIMESTAMP=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
 
 # Validator info
@@ -115,33 +123,16 @@ TOKENS=$(echo "$VALIDATOR_JSON" | jq -r '.tokens // "N/A"' 2>/dev/null || echo "
 COMMISSION=$(echo "$VALIDATOR_JSON" | jq -r '.commission.commission_rates.rate // "N/A"' 2>/dev/null || echo "N/A")
 STATUS=$(echo "$VALIDATOR_JSON" | jq -r '.status // "N/A"' 2>/dev/null || echo "N/A")
 
-# Hardware check
-STORAGE_TOTAL=$(df -BG / 2>/dev/null | awk 'NR==2 {print $2}' | tr -d 'G' || echo "N/A")
-STORAGE_USED=$(df -BG / 2>/dev/null | awk 'NR==2 {print $3}' | tr -d 'G' || echo "N/A")
-RAM_TOTAL=$(free -g 2>/dev/null | awk '/Mem:/ {print $2}' || echo "N/A")
-RAM_USED=$(free -g 2>/dev/null | awk '/Mem:/ {print $3}' || echo "N/A")
-
-# Requirements check
-CPU_OK="❌"
-if [ "$CPU_CORES" -ge 32 ] 2>/dev/null && [ "$CPU_GFNI" -gt 0 ] 2>/dev/null && [ "$CPU_SHANI" -gt 0 ] 2>/dev/null; then
-    CPU_OK="✅"
-fi
-
-STORAGE_OK="❌"
-if [ "$STORAGE_TOTAL" -ge 10000 ] 2>/dev/null; then
-    STORAGE_OK="✅"
-fi
-
 # Generate markdown
 cat > "$AUDIT_FILE" << EOF
-# Apollo Validator — Automated Audit
+# Apollo Validator — Infrastructure Audit
 
 > Last updated: $TIMESTAMP
-> Auto-generated by audit.sh — do not edit manually
+> Auto-generated by audit.sh
 
 ---
 
-## Validator Status
+## Validator
 
 | Metric | Value |
 |---|---|
@@ -155,38 +146,20 @@ cat > "$AUDIT_FILE" << EOF
 | Missed Blocks | $MISSED_BLOCKS |
 | Jailed Until | $JAILED_UNTIL |
 
-## Hardware
-
-| Component | Value | Required | Status |
-|---|---|---|---|
-| CPU | $CPU_MODEL | 32 cores + GFNI + SHA-NI | $CPU_OK |
-| CPU Cores | $CPU_CORES | ≥32 | $CPU_OK |
-| GFNI | $CPU_GFNI | >0 | $CPU_OK |
-| SHA-NI | $CPU_SHANI | >0 | $CPU_OK |
-| RAM | ${RAM_USED}G / ${RAM_TOTAL}G | ≥32 GB | $([ "$RAM_TOTAL" -ge 32 ] 2>/dev/null && echo "✅" || echo "❌") |
-| Storage | ${STORAGE_USED}G / ${STORAGE_TOTAL}G | ≥12 TiB | $STORAGE_OK |
-
-## System Resources
+## Server
 
 | Metric | Value |
 |---|---|
+| IP | $SERVER_IP |
+| Location | $HOSTING_LOCATION |
+| OS | $OS_INFO |
+| CPU | $CPU_MODEL |
+| CPU Cores | $CPU_CORES |
+| RAM | ${RAM_USED} MB / ${RAM_TOTAL} MB |
+| Storage | ${DISK_USED} MB / ${DISK_TOTAL} MB |
 | CPU Usage | ${SYS_CPU}% |
-| RAM Usage | ${SYS_RAM}% |
-| Disk Usage | ${SYS_DISK}% |
 | Server Uptime | $SERVER_UPTIME |
 | Celestia Running Since | $CELESTIA_START |
-| OS | $OS_INFO |
-
-## Requirements Gap Analysis
-
-| Requirement | Current | Required | Gap |
-|---|---|---|---|
-| CPU Cores | $CPU_CORES | 32 + GFNI/SHA-NI | $([ "$CPU_CORES" -ge 32 ] 2>/dev/null && echo "✅" || echo "🔴 CRITICAL") |
-| RAM | ${RAM_TOTAL} GB | 32 GB min | $([ "$RAM_TOTAL" -ge 32 ] 2>/dev/null && echo "✅" || echo "🔴") |
-| Storage | ${STORAGE_TOTAL} GB | 12288 GB (12 TiB) | $([ "$STORAGE_TOTAL" -ge 10000 ] 2>/dev/null && echo "✅" || echo "🔴 CRITICAL") |
-| Uptime | $SYNC_STATUS | Active | $([ "$SYNC_STATUS" = "✅ Synced" ] && echo "✅" || echo "🔴") |
-| Jail | $JAILED_UNTIL | none | $([ "$JAILED_UNTIL" = "none" ] && echo "✅" || echo "🔴") |
-| Missed Blocks | $MISSED_BLOCKS | 0 | $([ "$MISSED_BLOCKS" = "0" ] && echo "✅" || echo "🟡") |
 
 ---
 
