@@ -8,6 +8,8 @@ set -euo pipefail
 # === CONFIG ===
 VALIDATOR_ADDR="celestiavaloper1mcjmn4s8ee5ce0wsuat98kqxggfrhk04te0d38"
 CELESTIA_RPC="http://localhost:36657"
+CELESTIA_BIN="/root/go/bin/celestia-appd"
+CELESTIA_HOME="/root/.celestia-app"
 AUDIT_DIR="$HOME/apollo-validator-infra"
 AUDIT_FILE="$AUDIT_DIR/VALIDATOR-AUDIT.md"
 LOG_FILE="/var/log/validator-audit.log"
@@ -36,12 +38,12 @@ get_peer_count() {
 }
 
 get_validator_info() {
-    celestia-appd query staking validator "$VALIDATOR_ADDR" --output json 2>/dev/null || echo "{}"
+    $CELESTIA_BIN query staking validator "$VALIDATOR_ADDR" --home "$CELESTIA_HOME" --node "tcp://127.0.0.1:36657" --output json 2>/dev/null || echo "{}"
 }
 
 get_jail_status() {
     local info
-    info=$(celestia-appd query slashing signing-info "$VALIDATOR_ADDR" --output json 2>/dev/null || echo "{}")
+    info=$($CELESTIA_BIN query slashing signing-info "$VALIDATOR_ADDR" --home "$CELESTIA_HOME" --node "tcp://127.0.0.1:36657" --output json 2>/dev/null || echo "{}")
     local missed
     missed=$(echo "$info" | jq -r '.missed_blocks_counter // "0"' 2>/dev/null || echo "0")
     local jailed_until
