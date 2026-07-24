@@ -7,6 +7,7 @@ set -euo pipefail
 
 # === CONFIG ===
 VALIDATOR_ADDR="celestiavaloper1mcjmn4s8ee5ce0wsuat98kqxggfrhk04te0d38"
+CELESTIA_RPC="http://localhost:36657"
 AUDIT_DIR="$HOME/apollo-validator-infra"
 AUDIT_FILE="$AUDIT_DIR/VALIDATOR-AUDIT.md"
 LOG_FILE="/var/log/validator-audit.log"
@@ -18,12 +19,12 @@ log() {
 }
 
 get_block_height() {
-    curl -s --max-time 5 localhost:26657/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height' 2>/dev/null || echo "N/A"
+    curl -s --max-time 5 $CELESTIA_RPC/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height' 2>/dev/null || echo "N/A"
 }
 
 get_sync_status() {
     local catching_up
-    catching_up=$(curl -s --max-time 5 localhost:26657/status 2>/dev/null | jq -r '.result.sync_info.catching_up' 2>/dev/null || echo "unknown")
+    catching_up=$(curl -s --max-time 5 $CELESTIA_RPC/status 2>/dev/null | jq -r '.result.sync_info.catching_up' 2>/dev/null || echo "unknown")
     if [ "$catching_up" = "false" ]; then echo "Synced"
     elif [ "$catching_up" = "true" ]; then echo "Catching up"
     else echo "Unknown"
@@ -31,7 +32,7 @@ get_sync_status() {
 }
 
 get_peer_count() {
-    curl -s --max-time 5 localhost:26657/net_info 2>/dev/null | jq -r '.result.n_peers' 2>/dev/null || echo "N/A"
+    curl -s --max-time 5 $CELESTIA_RPC/net_info 2>/dev/null | jq -r '.result.n_peers' 2>/dev/null || echo "N/A"
 }
 
 get_validator_info() {
